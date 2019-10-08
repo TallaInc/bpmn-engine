@@ -91,4 +91,75 @@ describe('issues', () => {
       expect(End, 'state 6 End').to.have.property('status', 'started');
     });
   });
+
+  describe("new issue - setting engine output from script", () => {
+    const source = `<?xml version="1.0" encoding="UTF-8"?>
+    <bpmn:definitions xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" xmlns:camunda="http://camunda.org/schema/1.0/bpmn" id="Definitions_01d9p2c" targetNamespace="http://bpmn.io/schema/bpmn" exporter="Camunda Modeler" exporterVersion="3.2.3">
+      <bpmn:process id="first_process" isExecutable="true" camunda:versionTag="1.0" camunda:historyTimeToLive="365">
+        <bpmn:startEvent id="StartEvent_0an034v">
+          <bpmn:outgoing>SequenceFlow_19p3cf1</bpmn:outgoing>
+        </bpmn:startEvent>
+        <bpmn:sequenceFlow id="SequenceFlow_19p3cf1" sourceRef="StartEvent_0an034v" targetRef="Task_0nh74lm" />
+        <bpmn:endEvent id="IntermediateThrowEvent_1jovaga" name="Throw">
+          <bpmn:incoming>SequenceFlow_183i0pk</bpmn:incoming>
+        </bpmn:endEvent>
+        <bpmn:sequenceFlow id="SequenceFlow_0zn9m7b" sourceRef="Task_0nh74lm" targetRef="Task_1yzzr7e" />
+        <bpmn:scriptTask id="Task_0nh74lm" name="Script" scriptFormat="javascript">
+          <bpmn:incoming>SequenceFlow_19p3cf1</bpmn:incoming>
+          <bpmn:outgoing>SequenceFlow_0zn9m7b</bpmn:outgoing>
+          <bpmn:script>environment.output.test = "set from script"; next()</bpmn:script>
+        </bpmn:scriptTask>
+        <bpmn:userTask id="Task_1yzzr7e" name="Get input">
+          <bpmn:extensionElements>
+            <camunda:properties>
+              <camunda:property name="text" value="123" />
+            </camunda:properties>
+            <camunda:formData>
+              <camunda:formField id="FormField_0ks539t" label="1" type="enum" />
+            </camunda:formData>
+          </bpmn:extensionElements>
+          <bpmn:incoming>SequenceFlow_0zn9m7b</bpmn:incoming>
+          <bpmn:outgoing>SequenceFlow_183i0pk</bpmn:outgoing>
+        </bpmn:userTask>
+        <bpmn:sequenceFlow id="SequenceFlow_183i0pk" sourceRef="Task_1yzzr7e" targetRef="IntermediateThrowEvent_1jovaga" />
+      </bpmn:process>
+      <bpmn:message id="Message_1my3vry" name="Message_3fks037" />
+      <bpmn:signal id="Signal_0hs208i" name="Signal_0usjrve" />
+    </bpmn:definitions>`
+
+    it('sets engine output from a script at activity.wait', async () => {
+      const listener = new EventEmitter();
+      const engine = Engine({
+        name: 'Engine',
+        source,
+        listener,
+      });
+
+      const states = [];
+
+      listener.on('activity.wait', exec => {
+        // When we get to the UserTask, the ScriptTask should be completed and set the output
+        expect(engine.environment.output.test).to.equal("set from script")
+      })
+
+      await engine.execute({ listener });
+    });
+
+    it('sets engine output from a script at engine completion', async () => {
+      const listener = new EventEmitter();
+      const engine = Engine({
+        name: 'Engine',
+        source,
+        listener,
+      });
+
+      const states = [];
+
+      listener.on('activity.wait', exec => exec.signal())
+
+      await engine.execute({ listener });
+
+      expect(engine.environment.output.test).to.equal("set from script")
+    });
+  });
 });
