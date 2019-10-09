@@ -135,8 +135,6 @@ describe('issues', () => {
         listener,
       });
 
-      const states = [];
-
       listener.on('activity.wait', exec => {
         // When we get to the UserTask, the ScriptTask should be completed and set the output
         expect(engine.environment.output.test).to.equal("set from script")
@@ -153,13 +151,49 @@ describe('issues', () => {
         listener,
       });
 
-      const states = [];
-
       listener.on('activity.wait', exec => exec.signal())
 
       await engine.execute({ listener });
 
       expect(engine.environment.output.test).to.equal("set from script")
+    });
+
+    it('resumes with correct state', async () => {
+      let state
+
+      const listener = new EventEmitter();
+      const engine = Engine({
+        name: 'Engine',
+        source,
+        listener,
+      });
+
+      const resumeListener = new EventEmitter();
+      const resumeEngine = Engine({
+        name: 'Engine',
+        source,
+        listener: resumeListener,
+      });
+
+
+      resumeListener.on('activity.wait', exec => {
+        expect(exec.environment.output.test).to.equal("set from script")
+      })
+
+      listener.on('activity.wait', exec => {
+        expect(exec.environment.output.test).to.equal("set from script")
+
+        engine.getState().then(s => {
+          state = s
+          engine.stop()
+        })
+      })
+
+      await engine.execute({ listener })
+
+      resumeEngine.recover(state)
+
+      await resumeEngine.resume({ listener: resumeListener })
     });
   });
 });
